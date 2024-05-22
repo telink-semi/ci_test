@@ -1,0 +1,130 @@
+stages:
+  - scc
+  - checkLicense
+  - build_Andes
+  - oss
+  - misspellChecking
+  - sensitive_word_check
+
+scc:
+  stage: scc 
+  tags:
+    - LINUX
+  dependencies: []
+  script:
+    - echo "Enter scc stage"
+    - scc | tee scc.txt
+    - bash /usr/bin/scc_calc.sh
+    - echo "The End SCC result:"
+    - cat scc.txt
+  artifacts:
+    paths:
+    - scc.txt
+  when: manual #always
+
+checkLicense:
+  stage: checkLicense
+  tags:
+    - LINUX
+  allow_failure: yes
+  dependencies: []
+  before_script:
+  script:
+    - date
+    - >
+      if [ -e  "license_list.txt" ] ; then
+          echo "have find license_list.txt, checking ..."
+          check_license
+      else
+          echo "Not found the license_list.txt at current directory:$PWD"
+          echo "Will generate license_list_gen.txt"
+          generat_license_list
+      fi
+    - date
+    - ls
+
+  artifacts:
+    when: always
+    paths:
+    - "mismatch_license.txt"
+    - "no_license*.txt"
+    - "unknow_type_file.txt"
+    - "license_list_gen.txt"
+    - "no_license_list_gen.txt"
+    - "mismatch_license_file_gen.txt"
+  when: manual #always
+
+
+build_Andes:
+  variables:
+    ECLIPSE_PROJECT_PATH: './eagle_ble_sdk'
+    ECLIPSE_PROJECT_NAME: 'B91_ble_multi_conn_sdk'
+    ECLIPSE_BUILD_TARGET: 'B91_demo'         
+  stage: build_Andes
+  tags:
+    - TELINKIDE_LINUX
+  dependencies: []
+  before_script:
+  script:
+    - date
+    - echo "--------------- Will build Demo -----------------"
+    - echo $ECLIPSE_PROJECT_PATH --- $ECLIPSE_PROJECT_NAME/$ECLIPSE_BUILD_TARGET
+    - $ANDESRISCV_ECLIPSE_BUILD  -data ${CI_PIPELINE_ID}_WS  -import $ECLIPSE_PROJECT_PATH -cleanBuild $ECLIPSE_PROJECT_NAME/$ECLIPSE_BUILD_TARGET
+    - date
+  artifacts:
+    paths:
+    - "B91_ble_multi_conn_sdk/B91_demo/output/objdump.txt"
+    - "b91m_ble_multiconn_sdk/B91_demo/output/*.bin"
+  when: manual
+
+oss:
+  tags:
+    - OSS
+  stage: oss
+  dependencies: []
+  script:
+    - oss_checking .
+  artifacts:
+    paths:
+    - scan_result
+  when: manual      
+  
+
+misspellChecking:     
+  stage: misspellChecking
+  variables:
+    pattern: ""
+    word_filter_pattern: ""
+  tags:
+    - LINUX
+  script:
+    - echo "--------------- Begin ------------------------"
+    - misspell-check
+    - echo "---------------- End -----------------------"
+  artifacts:
+    when: on_failure
+    paths:
+    - misspell_result.txt
+    - misspell_result_after_filter.txt
+  when: manual 
+
+
+sensitive_word_check:
+  variables:
+    filter_pattern: ""
+    sensitive_word_pattern: "(esb|nrf|nordic|Shock[ ]*Burst)"
+    result_file: "sensitive_word_check_result.txt"
+    after_filter_result_file: "sensitive_word_check_after_filter_result.txt"
+  stage: sensitive_word_check 
+  tags:
+    - LINUX
+  dependencies: []
+  script:
+    - sensitive_word_check.sh
+  artifacts:
+    name: "sensitive_word_check_result"
+    when: always
+    paths:
+    - $result_file
+    - $after_filter_result_file
+  when: manual 
